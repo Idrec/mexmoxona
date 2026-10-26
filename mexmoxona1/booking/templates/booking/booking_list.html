@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load booking_extras %}
+
+{% block title %}Bronlar — Mehmonxona{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Bronlar</h1>
+  <nav class="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm font-medium">
+    {% for value, label in status_filters %}
+      <a href="?status={{ value }}"
+         class="rounded-md px-3 py-1.5 {% if value == status %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+</div>
+
+<ul class="mt-6 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+  {% for booking in bookings %}
+    <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-4">
+      <div class="min-w-0">
+        <p class="font-semibold text-slate-900">
+          № {{ booking.pk }} · {{ booking.guest_name }}
+          {% if booking.status == 'cancelled' %}
+            <span class="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">bekor qilingan</span>
+          {% endif %}
+        </p>
+        <p class="text-sm text-slate-500">
+          {{ booking.phone }} · Xona № {{ booking.room.number }} ({{ booking.room.room_type.name }})
+        </p>
+        <p class="text-sm text-slate-500">
+          {{ booking.check_in|date:"d.m.Y" }} – {{ booking.check_out|date:"d.m.Y" }} · {{ booking.nights }} kecha ·
+          <span class="font-medium text-slate-700">{{ booking.total_price|som }}</span>
+        </p>
+      </div>
+      {% if booking.status == 'active' %}
+        <form method="post" action="{% url 'booking:cancel' booking.pk %}"
+              onsubmit="return confirm('Bron № {{ booking.pk }} bekor qilinsinmi?');">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="{{ status }}">
+          <button type="submit"
+                  class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
+            Bekor qilish
+          </button>
+        </form>
+      {% endif %}
+    </li>
+  {% empty %}
+    <li class="p-4 text-slate-500">Bronlar yo‘q.</li>
+  {% endfor %}
+</ul>
+{% endblock %}
