@@ -16,9 +16,18 @@
            class="rounded-lg px-3 py-2 {% if current == 'home' %}bg-sky-50 text-sky-700{% else %}text-slate-600 hover:bg-slate-100{% endif %}">Qidirish</a>
         <a href="{% url 'booking:rooms' %}"
            class="rounded-lg px-3 py-2 {% if current == 'rooms' %}bg-sky-50 text-sky-700{% else %}text-slate-600 hover:bg-slate-100{% endif %}">Xonalar</a>
-        {% if user.is_staff %}
+        {% if is_manager %}
+          <a href="{% url 'booking:panel' %}"
+             class="rounded-lg px-3 py-2 {% if current == 'panel' or current == 'room_photos' %}bg-sky-50 text-sky-700{% else %}text-slate-600 hover:bg-slate-100{% endif %}">Panel</a>
           <a href="{% url 'booking:booking_list' %}"
              class="rounded-lg px-3 py-2 {% if current == 'booking_list' %}bg-sky-50 text-sky-700{% else %}text-slate-600 hover:bg-slate-100{% endif %}">Bronlar</a>
+          <form method="post" action="{% url 'booking:logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">Chiqish</button>
+          </form>
+        {% else %}
+          <a href="{% url 'booking:login' %}"
+             class="rounded-lg px-3 py-2 {% if current == 'login' %}bg-sky-50 text-sky-700{% else %}text-slate-500 hover:bg-slate-100{% endif %}">Kirish</a>
         {% endif %}
       </nav>
     </div>

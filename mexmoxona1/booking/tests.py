@@ -4,8 +4,10 @@ from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.forms import modelform_factory
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -15,6 +17,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .models import Booking, Room, RoomImage, RoomType
+from .permissions import MANAGER_GROUP
 from .services import get_available_rooms
 
 
@@ -240,3 +243,124 @@ class RoomPhotoTests(TestCase):
         response = self.client.get(reverse('booking:booking_list'), {'q': 'aziza'})
         self.assertContains(response, 'Aziza')
         self.assertNotContains(response, 'Bobur')
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class ManagerRoleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        room_type = RoomType.objects.create(
+            name='Standart', price_per_night=Decimal('350000'), capacity=2
+        )
+        cls.room = Room.objects.create(number='101', room_type=room_type, floor=1)
+        cls.other_room = Room.objects.create(number='102', room_type=room_type, floor=1)
+        # A manager is NOT staff: no access to /admin/
+        cls.manager = User.objects.create_user('menejer', password='parol-12345')
+        cls.manager.groups.add(Group.objects.get(name=MANAGER_GROUP))
+        cls.guest_user = User.objects.create_user('oddiy', password='parol-12345')
+
+    def photos_url(self, room=None):
+        return reverse('booking:room_photos', args=[(room or self.room).pk])
+
+    def test_group_exists_after_migrations(self):
+        self.assertTrue(Group.objects.filter(name=MANAGER_GROUP).exists())
+
+    def test_anonymous_redirected_to_login(self):
+        for name in ('booking:panel', 'booking:booking_list'):
+            url = reverse(name)
+            self.assertRedirects(self.client.get(url), f"{reverse('booking:login')}?next={url}")
+        self.assertEqual(self.client.get(self.photos_url()).status_code, 302)
+
+    def test_regular_user_gets_403(self):
+        self.client.force_login(self.guest_user)
+        for url in (reverse('booking:panel'), reverse('booking:booking_list'), self.photos_url()):
+            self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_manager_can_use_panel_but_not_admin(self):
+        self.client.force_login(self.manager)
+        self.assertEqual(self.client.get(reverse('booking:panel')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('booking:booking_list')).status_code, 200)
+        # /admin/ sends non-staff users to the admin login page
+        response = self.client.get(reverse('admin:index'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/admin/login/', response.url)
+
+    def test_login_and_logout_flow(self):
+        bad = self.client.post(reverse('booking:login'), {'username': 'menejer', 'password': 'xato'})
+        self.assertContains(bad, 'Login yoki parol noto‘g‘ri.')
+
+        good = self.client.post(
+            reverse('booking:login'), {'username': 'menejer', 'password': 'parol-12345'}
+        )
+        self.assertRedirects(good, reverse('booking:panel'))
+        self.assertContains(self.client.get(reverse('booking:panel')), 'Chiqish')
+
+        self.client.post(reverse('booking:logout'))
+        self.assertEqual(self.client.get(reverse('booking:panel')).status_code, 302)
+
+    def test_manager_sees_guest_and_cancels_booking(self):
+        booking = Booking.objects.create(room=self.room, guest_name='Maxfiy Mehmon',
+                                         phone='+998901234567', check_in=day(0), check_out=day(2))
+        self.client.force_login(self.manager)
+        self.assertContains(self.client.get(reverse('booking:rooms')), 'Maxfiy Mehmon')
+        self.client.post(reverse('booking:cancel', args=[booking.pk]), {'status': 'active'})
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CANCELLED)
+
+    def test_panel_lists_arrivals_and_departures(self):
+        Booking.objects.create(room=self.room, guest_name='Keluvchi', phone='+998901111111',
+                               check_in=day(0), check_out=day(2))
+        Booking.objects.create(room=self.other_room, guest_name='Ketuvchi', phone='+998902222222',
+                               check_in=day(-2), check_out=day(0))
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse('booking:panel'))
+        self.assertEqual([b.guest_name for b in response.context['arrivals']], ['Keluvchi'])
+        self.assertEqual([b.guest_name for b in response.context['departures']], ['Ketuvchi'])
+
+    def test_manager_uploads_multiple_photos(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            self.photos_url(), {'images': [make_image('a.png'), make_image('b.png')]}
+        )
+        self.assertRedirects(response, self.photos_url())
+        self.assertEqual(self.room.images.count(), 2)
+        self.assertEqual([i.order for i in self.room.images.all()], [0, 1])
+
+    def test_invalid_upload_shows_error_and_saves_nothing(self):
+        self.client.force_login(self.manager)
+        fake = SimpleUploadedFile('x.png', b'not an image', content_type='image/png')
+        response = self.client.post(self.photos_url(), {'images': [make_image('ok.png'), fake]})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'x.png')
+        self.assertEqual(self.room.images.count(), 0)
+
+    def test_set_cover_and_delete_photo(self):
+        first = RoomImage.objects.create(room=self.room, image=make_image('a.png'), order=0)
+        second = RoomImage.objects.create(room=self.room, image=make_image('b.png'), order=1)
+        self.client.force_login(self.manager)
+
+        cover_url = reverse('booking:room_photo_cover', args=[self.room.pk, second.pk])
+        self.assertEqual(self.client.get(cover_url).status_code, 405)
+        self.client.post(cover_url)
+        self.assertEqual(list(self.room.images.all()), [second, first])
+
+        delete_url = reverse('booking:room_photo_delete', args=[self.room.pk, second.pk])
+        self.client.post(delete_url)
+        self.assertEqual(list(self.room.images.all()), [first])
+
+    def test_cannot_touch_another_rooms_photo(self):
+        image = RoomImage.objects.create(room=self.other_room, image=make_image())
+        self.client.force_login(self.manager)
+        url = reverse('booking:room_photo_delete', args=[self.room.pk, image.pk])
+        self.assertEqual(self.client.post(url).status_code, 404)
+        self.assertTrue(RoomImage.objects.filter(pk=image.pk).exists())
+
+    def test_create_manager_command(self):
+        call_command('create_manager', 'yangi', password='Kuchli-parol-2026', verbosity=0)
+        user = User.objects.get(username='yangi')
+        self.assertFalse(user.is_staff)
+        self.assertTrue(user.groups.filter(name=MANAGER_GROUP).exists())
+        with self.assertRaises(CommandError):
+            call_command('create_manager', 'yangi', password='Kuchli-parol-2026', verbosity=0)
+        with self.assertRaises(CommandError):
+            call_command('create_manager', 'boshqa', password='123', verbosity=0)

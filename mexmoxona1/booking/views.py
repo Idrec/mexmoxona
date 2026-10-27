@@ -2,7 +2,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.views import LoginView
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -10,16 +10,19 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import BookingForm, SearchForm, StayForm
-from .models import Booking, Room
+from .forms import BookingForm, ManagerLoginForm, RoomPhotosForm, SearchForm, StayForm
+from .models import Booking, Room, RoomImage
+from .permissions import is_manager, manager_required
 from .services import (
     RoomNotAvailable,
+    add_room_images,
     cancel_booking,
     create_booking,
     get_available_rooms,
     get_current_bookings,
     get_rooms_with_status,
     is_room_available,
+    set_cover_image,
 )
 
 SESSION_KEY = 'booking_ids'
@@ -112,7 +115,7 @@ def confirmation(request, pk):
 def rooms(request):
     today = timezone.localdate()
     room_list = list(get_rooms_with_status(today))
-    if request.user.is_staff:
+    if is_manager(request.user):
         # Managers see who is staying in each busy room
         current = get_current_bookings(today)
         for room in room_list:
@@ -131,7 +134,7 @@ def room_detail(request, room_id):
     room = get_object_or_404(
         Room.objects.select_related('room_type').prefetch_related('images'), pk=room_id
     )
-    if not room.is_active and not request.user.is_staff:
+    if not room.is_active and not is_manager(request.user):
         raise Http404
 
     context = {
@@ -143,7 +146,7 @@ def room_detail(request, room_id):
             'check_in': today, 'check_out': today + timedelta(days=1),
         }),
     }
-    if request.user.is_staff:
+    if is_manager(request.user):
         context['current_booking'] = get_current_bookings(today).get(room.pk)
         context['upcoming'] = (
             room.bookings.active().filter(check_out__gt=today).order_by('check_in')[:5]
@@ -158,7 +161,7 @@ STATUS_FILTERS = [
 ]
 
 
-@staff_member_required
+@manager_required
 def booking_list(request):
     status = request.GET.get('status', 'active')
     if status not in dict(STATUS_FILTERS):
@@ -182,7 +185,7 @@ def booking_list(request):
     })
 
 
-@staff_member_required
+@manager_required
 @require_POST
 def cancel(request, pk):
     booking = get_object_or_404(Booking, pk=pk)
@@ -197,3 +200,64 @@ def cancel(request, pk):
     if request.POST.get('q'):
         params['q'] = request.POST['q']
     return redirect(f"{reverse('booking:booking_list')}?{urlencode(params)}")
+
+
+class ManagerLoginView(LoginView):
+    template_name = 'booking/login.html'
+    authentication_form = ManagerLoginForm
+    redirect_authenticated_user = True
+
+
+@manager_required
+def panel(request):
+    today = timezone.localdate()
+    active = Booking.objects.active().select_related('room__room_type')
+    room_list = list(get_rooms_with_status(today))
+    active_rooms = [r for r in room_list if r.is_active]
+    context = {
+        'today': today,
+        'arrivals': active.filter(check_in=today).order_by('room__number'),
+        'departures': active.filter(check_out=today).order_by('room__number'),
+        'upcoming': active.filter(
+            check_in__gt=today, check_in__lte=today + timedelta(days=7)
+        ).order_by('check_in', 'room__number'),
+        'busy_count': sum(1 for r in active_rooms if r.is_busy),
+        'free_count': sum(1 for r in active_rooms if not r.is_busy),
+    }
+    return render(request, 'booking/panel.html', context)
+
+
+@manager_required
+def room_photos(request, room_id):
+    room = get_object_or_404(
+        Room.objects.select_related('room_type').prefetch_related('images'), pk=room_id
+    )
+    if request.method == 'POST':
+        form = RoomPhotosForm(request.POST, request.FILES)
+        if form.is_valid():
+            saved = add_room_images(room, form.cleaned_data['images'])
+            messages.success(request, f'{len(saved)} ta rasm yuklandi.')
+            return redirect('booking:room_photos', room_id=room.pk)
+    else:
+        form = RoomPhotosForm()
+    return render(request, 'booking/room_photos.html', {
+        'room': room, 'images': list(room.images.all()), 'form': form,
+    })
+
+
+@manager_required
+@require_POST
+def room_photo_delete(request, room_id, image_id):
+    image = get_object_or_404(RoomImage, pk=image_id, room_id=room_id)
+    image.delete()
+    messages.success(request, 'Rasm o‘chirildi.')
+    return redirect('booking:room_photos', room_id=room_id)
+
+
+@manager_required
+@require_POST
+def room_photo_cover(request, room_id, image_id):
+    image = get_object_or_404(RoomImage, pk=image_id, room_id=room_id)
+    set_cover_image(image)
+    messages.success(request, 'Asosiy rasm o‘zgartirildi.')
+    return redirect('booking:room_photos', room_id=room_id)

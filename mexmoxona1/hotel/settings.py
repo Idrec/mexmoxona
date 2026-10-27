@@ -67,6 +67,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'booking.context_processors.manager',
             ],
         },
     },
@@ -118,6 +119,12 @@ TIME_ZONE = 'Asia/Tashkent'
 USE_I18N = True
 
 USE_TZ = True
+
+
+# Login for managers (own panel, not /admin/)
+LOGIN_URL = 'booking:login'
+LOGIN_REDIRECT_URL = 'booking:panel'
+LOGOUT_REDIRECT_URL = 'booking:home'
 
 
 # Static files (CSS, JavaScript, Images)

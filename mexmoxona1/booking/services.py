@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
-from .models import Booking, Room
+from .models import Booking, Room, RoomImage
 
 
 class RoomNotAvailable(Exception):
@@ -69,3 +69,21 @@ def get_current_bookings(day):
     """Active bookings whose stay includes `day`, as {room_id: booking} (for staff)."""
     bookings = Booking.objects.active().filter(check_in__lte=day, check_out__gt=day)
     return {b.room_id: b for b in bookings}
+
+
+@transaction.atomic
+def set_cover_image(image):
+    """Make `image` the first photo of its room; the others keep their relative order."""
+    others = list(RoomImage.objects.filter(room_id=image.room_id).exclude(pk=image.pk))
+    for position, other in enumerate([image] + others):
+        if other.order != position:
+            RoomImage.objects.filter(pk=other.pk).update(order=position)
+
+
+def add_room_images(room, files):
+    """Save uploaded files as photos of `room`, after the existing ones."""
+    next_order = (RoomImage.objects.filter(room=room).count())
+    return [
+        RoomImage.objects.create(room=room, image=file, order=next_order + i)
+        for i, file in enumerate(files)
+    ]

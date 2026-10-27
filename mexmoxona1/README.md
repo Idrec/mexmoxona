@@ -70,18 +70,33 @@ Brauzerda oching: <http://127.0.0.1:8000/>
 | `/book/<id>/` | Xonani bron qilish formasi |
 | `/rooms/` | Barcha xonalar rasmlari bilan va bugungi holati (bo‘sh / band). Xodimga mehmon ismi ham ko‘rinadi |
 | `/rooms/<id>/` | Xona sahifasi: rasmlar galereyasi, narx, bron qilish. Xodimga hozirgi va yaqin bronlar ko‘rinadi |
-| `/bookings/` | Bronlar ro‘yxati, ism / telefon / xona bo‘yicha qidirish va bekor qilish (faqat xodimlar uchun) |
-| `/admin/` | Boshqaruv paneli |
+| `/login/` | Menejerlar uchun kirish sahifasi |
+| `/panel/` | Menejer paneli: bugun keladigan / ketadigan mehmonlar, keyingi 7 kun, bo‘sh / band xonalar |
+| `/panel/rooms/<id>/photos/` | Xona rasmlarini yuklash, o‘chirish, asosiy rasmni tanlash |
+| `/bookings/` | Bronlar ro‘yxati, ism / telefon / xona bo‘yicha qidirish va bekor qilish (menejerlar uchun) |
+| `/admin/` | Admin panel: xona turlari, narxlar, foydalanuvchilar (faqat admin) |
 
-`/bookings/` sahifasiga kirish uchun avval `/admin/` orqali xodim
-(`is_staff`) hisobi bilan tizimga kiring. Shundan so‘ng menyuda “Bronlar”
-bo‘limi paydo bo‘ladi.
+## Rollar
+
+- **Admin** — `createsuperuser` bilan yaratiladi, `/admin/` ga kiradi. Menejer ko‘radigan hamma narsani ham ko‘radi.
+- **Menejer** — `/admin/` ga kira olmaydi. `/login/` orqali kirib `/panel/` da ishlaydi: bronlarni ko‘radi va bekor qiladi, xonalar rasmlarini boshqaradi, xonadagi mehmon ma’lumotlarini ko‘radi.
+- **Mehmon** — kirishsiz xonalarni qidiradi va bron qiladi.
+
+Menejer hisobini yaratish:
+
+```bash
+python manage.py create_manager menejer1
+```
+
+(parol so‘raladi). Yoki `/admin/` da foydalanuvchi yaratib, uni **Menejer** guruhiga qo‘shing
+va “Staff status” belgisini qo‘ymang.
 
 ## Xona rasmlari
 
-`/admin/` → **Xonalar** → kerakli xonani oching → pastdagi “Xona rasmlari” bo‘limidan
-rasm yuklang (JPG/PNG/WebP, har biri 5 MB gacha). “Tartib” raqami kichik bo‘lgan rasm
-birinchi (asosiy) bo‘lib chiqadi. Rasmlar `media/` papkasida saqlanadi
+Menejer: `/panel/` → **Xonalar va rasmlar** → xonani oching → **Rasmlarni boshqarish**.
+Bir vaqtda 10 tagacha rasm yuklash mumkin (JPG/PNG/WebP, har biri 5 MB gacha).
+Birinchi rasm asosiy bo‘ladi, boshqasini “Asosiy qilish” tugmasi bilan almashtirish mumkin.
+Admin buni `/admin/` → **Xonalar** orqali ham qila oladi. Rasmlar `media/` papkasida saqlanadi
 (git’ga qo‘shilmaydi).
 
 ## Production uchun

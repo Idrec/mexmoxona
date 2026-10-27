@@ -13,7 +13,7 @@
 
 <ul class="mt-6 grid gap-4 sm:grid-cols-2">
   {% for room in rooms %}
-    {% if room.is_active or user.is_staff %}
+    {% if room.is_active or is_manager %}
     <li class="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <a href="{% url 'booking:room_detail' room.pk %}" class="block aspect-[16/10] bg-slate-100">
         {% include "booking/_room_photo.html" %}
@@ -25,7 +25,7 @@
             {{ room.room_type.name }} · {{ room.floor }}-qavat · {{ room.room_type.capacity }} kishigacha
           </p>
           <p class="text-sm text-slate-700">{{ room.room_type.price_per_night|som }}/kecha</p>
-          {% if user.is_staff and room.current_booking %}
+          {% if is_manager and room.current_booking %}
             <p class="mt-1 text-sm text-slate-500">
               {{ room.current_booking.guest_name }} · {{ room.current_booking.phone }}<br>
               {{ room.current_booking.check_in|date:"d.m" }} – {{ room.current_booking.check_out|date:"d.m.Y" }}

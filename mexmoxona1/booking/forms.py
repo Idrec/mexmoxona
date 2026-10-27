@@ -1,9 +1,10 @@
 import re
 
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 from django.utils import timezone
 
-from .models import Booking
+from .models import Booking, validate_image_size
 
 INPUT_CLASS = (
     'block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 '
@@ -94,3 +95,54 @@ class BookingForm(forms.ModelForm):
                 'Telefon raqamini to‘g‘ri kiriting, masalan: +998 90 123 45 67.'
             )
         return phone
+
+
+class ManagerLoginForm(AuthenticationForm):
+    error_messages = {
+        'invalid_login': 'Login yoki parol noto‘g‘ri.',
+        'inactive': 'Bu hisob faol emas.',
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].label = 'Login'
+        self.fields['password'].label = 'Parol'
+        for field in self.fields.values():
+            field.widget.attrs['class'] = INPUT_CLASS
+        self.fields['username'].widget.attrs['autofocus'] = True
+
+
+class MultipleFileInput(forms.FileInput):
+    allow_multiple_selected = True
+
+
+class MultipleImageField(forms.Field):
+    """Several image files in one input. Each file is checked like a normal ImageField."""
+    widget = MultipleFileInput
+    max_files = 10
+
+    def clean(self, data, initial=None):
+        files = data if isinstance(data, (list, tuple)) else ([data] if data else [])
+        if not files:
+            raise forms.ValidationError('Kamida bitta rasm tanlang.')
+        if len(files) > self.max_files:
+            raise forms.ValidationError(f'Bir vaqtda ko‘pi bilan {self.max_files} ta rasm yuklang.')
+
+        image_field = forms.ImageField()
+        cleaned, errors = [], []
+        for file in files:
+            try:
+                cleaned.append(image_field.clean(file))
+                validate_image_size(file)
+            except forms.ValidationError as error:
+                errors.extend(f'{file.name}: {message}' for message in error.messages)
+        if errors:
+            raise forms.ValidationError(errors)
+        return cleaned
+
+
+class RoomPhotosForm(forms.Form):
+    images = MultipleImageField(
+        label='Rasmlar',
+        widget=MultipleFileInput(attrs={'accept': 'image/*', 'class': INPUT_CLASS}),
+    )

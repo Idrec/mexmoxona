@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load booking_extras %}
+
+{% block title %}Panel — Mehmonxona{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold tracking-tight text-slate-900">Menejer paneli</h1>
+<p class="mt-1 text-slate-600">
+  Bugun, {{ today|date:"d.m.Y" }}:
+  <span class="font-medium text-emerald-700">{{ free_count }} bo‘sh</span>,
+  <span class="font-medium text-red-700">{{ busy_count }} band</span> xona
+</p>
+
+<div class="mt-4 flex flex-wrap gap-2 text-sm font-medium">
+  <a href="{% url 'booking:rooms' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50">Xonalar va rasmlar</a>
+  <a href="{% url 'booking:booking_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50">Barcha bronlar</a>
+</div>
+
+<div class="mt-8 grid gap-6 md:grid-cols-2">
+  <section>
+    <h2 class="font-semibold text-slate-900">Bugun keladi <span class="text-slate-400">({{ arrivals|length }})</span></h2>
+    <ul class="mt-2 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+      {% for b in arrivals %}
+        <li class="p-3">
+          <p class="font-medium text-slate-900">{{ b.guest_name }} · Xona № {{ b.room.number }}</p>
+          <p class="text-slate-500">{{ b.phone }} · {{ b.nights }} kecha</p>
+        </li>
+      {% empty %}
+        <li class="p-3 text-slate-500">Bugun kelish yo‘q.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2 class="font-semibold text-slate-900">Bugun ketadi <span class="text-slate-400">({{ departures|length }})</span></h2>
+    <ul class="mt-2 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+      {% for b in departures %}
+        <li class="p-3">
+          <p class="font-medium text-slate-900">{{ b.guest_name }} · Xona № {{ b.room.number }}</p>
+          <p class="text-slate-500">{{ b.phone }}</p>
+        </li>
+      {% empty %}
+        <li class="p-3 text-slate-500">Bugun ketish yo‘q.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<section class="mt-8">
+  <h2 class="font-semibold text-slate-900">Keyingi 7 kun <span class="text-slate-400">({{ upcoming|length }})</span></h2>
+  <ul class="mt-2 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+    {% for b in upcoming %}
+      <li class="flex flex-wrap justify-between gap-2 p-3">
+        <span class="font-medium text-slate-900">{{ b.guest_name }} · Xona № {{ b.room.number }}</span>
+        <span class="text-slate-500">{{ b.check_in|date:"d.m" }} – {{ b.check_out|date:"d.m.Y" }} · {{ b.phone }}</span>
+      </li>
+    {% empty %}
+      <li class="p-3 text-slate-500">Yaqin kunlarda yangi kelish yo‘q.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}
