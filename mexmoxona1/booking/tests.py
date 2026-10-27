@@ -1,13 +1,20 @@
+import shutil
+import tempfile
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.forms import modelform_factory
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Booking, Room, RoomType
+from PIL import Image
+
+from .models import Booking, Room, RoomImage, RoomType
 from .services import get_available_rooms
 
 
@@ -136,3 +143,100 @@ class BookViewTests(TestCase):
                                          check_in=day(1), check_out=day(2))
         response = self.client.get(reverse('booking:confirmation', args=[booking.pk]))
         self.assertEqual(response.status_code, 404)
+
+
+def make_image(name='photo.png', size=(40, 30)):
+    buffer = BytesIO()
+    Image.new('RGB', size, 'steelblue').save(buffer, 'PNG')
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type='image/png')
+
+
+TEMP_MEDIA = tempfile.mkdtemp()
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class RoomPhotoTests(TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEMP_MEDIA, ignore_errors=True)
+
+    @classmethod
+    def setUpTestData(cls):
+        room_type = RoomType.objects.create(
+            name='Lyuks', price_per_night=Decimal('600000'), capacity=3
+        )
+        cls.room = Room.objects.create(number='201', room_type=room_type, floor=2)
+        cls.empty_room = Room.objects.create(number='202', room_type=room_type, floor=2)
+
+    def test_cover_is_first_by_order_and_none_without_photos(self):
+        self.assertIsNone(self.empty_room.cover_image)
+        second = RoomImage.objects.create(room=self.room, image=make_image('b.png'), order=2)
+        first = RoomImage.objects.create(room=self.room, image=make_image('a.png'), order=1)
+        self.assertEqual(self.room.cover_image, first)
+        self.assertEqual(list(self.room.images.all()), [first, second])
+
+    def test_file_removed_from_disk_on_delete(self):
+        image = RoomImage.objects.create(room=self.room, image=make_image())
+        storage, name = image.image.storage, image.image.name
+        self.assertTrue(storage.exists(name))
+        image.delete()
+        self.assertFalse(storage.exists(name))
+
+    def test_rejects_non_image_and_oversized_files(self):
+        # The admin uploads through a ModelForm, which checks the file really is an image
+        form_class = modelform_factory(RoomImage, fields=['image'])
+        fake = SimpleUploadedFile('x.png', b'not an image', content_type='image/png')
+        self.assertFalse(form_class(files={'image': fake}).is_valid())
+        self.assertTrue(form_class(files={'image': make_image()}).is_valid())
+
+        big = make_image()
+        big.size = 6 * 1024 * 1024
+        with self.assertRaisesMessage(ValidationError, '5 MB'):
+            RoomImage(room=self.room, image=big).full_clean()
+
+    def test_room_pages_show_photos_and_placeholder(self):
+        image = RoomImage.objects.create(room=self.room, image=make_image())
+        for url in (reverse('booking:rooms'), reverse('booking:room_detail', args=[self.room.pk])):
+            self.assertContains(self.client.get(url), image.image.url)
+        self.assertContains(
+            self.client.get(reverse('booking:room_detail', args=[self.empty_room.pk])), 'Rasm yo‘q'
+        )
+
+    def test_search_results_show_cover(self):
+        image = RoomImage.objects.create(room=self.room, image=make_image())
+        response = self.client.get(
+            reverse('booking:home'),
+            {'check_in': day(1).isoformat(), 'check_out': day(2).isoformat(), 'guests': 1},
+        )
+        self.assertContains(response, image.image.url)
+
+    def test_inactive_room_hidden_from_public_but_not_staff(self):
+        self.empty_room.is_active = False
+        self.empty_room.save()
+        url = reverse('booking:room_detail', args=[self.empty_room.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertNotContains(self.client.get(reverse('booking:rooms')), 'Xona № 202')
+
+        self.client.force_login(User.objects.create_user('mgr', password='x', is_staff=True))
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_only_staff_see_guest_details(self):
+        Booking.objects.create(room=self.room, guest_name='Maxfiy Mehmon', phone='+998901234567',
+                               check_in=day(0), check_out=day(2))
+        for url in (reverse('booking:rooms'), reverse('booking:room_detail', args=[self.room.pk])):
+            self.assertNotContains(self.client.get(url), 'Maxfiy Mehmon')
+
+        self.client.force_login(User.objects.create_user('mgr', password='x', is_staff=True))
+        for url in (reverse('booking:rooms'), reverse('booking:room_detail', args=[self.room.pk])):
+            self.assertContains(self.client.get(url), 'Maxfiy Mehmon')
+
+    def test_booking_list_search(self):
+        Booking.objects.create(room=self.room, guest_name='Aziza', phone='+998901111111',
+                               check_in=day(1), check_out=day(2))
+        Booking.objects.create(room=self.empty_room, guest_name='Bobur', phone='+998902222222',
+                               check_in=day(1), check_out=day(2))
+        self.client.force_login(User.objects.create_user('mgr', password='x', is_staff=True))
+        response = self.client.get(reverse('booking:booking_list'), {'q': 'aziza'})
+        self.assertContains(response, 'Aziza')
+        self.assertNotContains(response, 'Bobur')

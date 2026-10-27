@@ -15,6 +15,7 @@ def get_available_rooms(check_in, check_out, guests=1):
         Room.objects.filter(is_active=True, room_type__capacity__gte=guests)
         .exclude(pk__in=busy_room_ids)
         .select_related('room_type')
+        .prefetch_related('images')
         .order_by('room_type__price_per_night', 'number')
     )
 
@@ -57,4 +58,14 @@ def get_rooms_with_status(day):
     busy_today = Booking.objects.active().filter(
         room=OuterRef('pk'), check_in__lte=day, check_out__gt=day
     )
-    return Room.objects.select_related('room_type').annotate(is_busy=Exists(busy_today))
+    return (
+        Room.objects.select_related('room_type')
+        .prefetch_related('images')
+        .annotate(is_busy=Exists(busy_today))
+    )
+
+
+def get_current_bookings(day):
+    """Active bookings whose stay includes `day`, as {room_id: booking} (for staff)."""
+    bookings = Booking.objects.active().filter(check_in__lte=day, check_out__gt=day)
+    return {b.room_id: b for b in bookings}

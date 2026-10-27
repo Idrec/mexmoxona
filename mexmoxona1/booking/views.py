@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -16,6 +17,7 @@ from .services import (
     cancel_booking,
     create_booking,
     get_available_rooms,
+    get_current_bookings,
     get_rooms_with_status,
     is_room_available,
 )
@@ -62,7 +64,10 @@ def home(request):
 
 
 def book(request, room_id):
-    room = get_object_or_404(Room.objects.select_related('room_type'), pk=room_id, is_active=True)
+    room = get_object_or_404(
+        Room.objects.select_related('room_type').prefetch_related('images'),
+        pk=room_id, is_active=True,
+    )
     stay_form = StayForm(request.GET)
     context = {'room': room, 'stay_form': stay_form}
 
@@ -107,6 +112,11 @@ def confirmation(request, pk):
 def rooms(request):
     today = timezone.localdate()
     room_list = list(get_rooms_with_status(today))
+    if request.user.is_staff:
+        # Managers see who is staying in each busy room
+        current = get_current_bookings(today)
+        for room in room_list:
+            room.current_booking = current.get(room.pk)
     context = {
         'today': today,
         'rooms': room_list,
@@ -114,6 +124,31 @@ def rooms(request):
         'busy_count': sum(1 for r in room_list if r.is_active and r.is_busy),
     }
     return render(request, 'booking/rooms.html', context)
+
+
+def room_detail(request, room_id):
+    today = timezone.localdate()
+    room = get_object_or_404(
+        Room.objects.select_related('room_type').prefetch_related('images'), pk=room_id
+    )
+    if not room.is_active and not request.user.is_staff:
+        raise Http404
+
+    context = {
+        'room': room,
+        'images': list(room.images.all()),
+        'is_busy': not is_room_available(room, today, today + timedelta(days=1)),
+        'today': today,
+        'stay_form': StayForm(initial={
+            'check_in': today, 'check_out': today + timedelta(days=1),
+        }),
+    }
+    if request.user.is_staff:
+        context['current_booking'] = get_current_bookings(today).get(room.pk)
+        context['upcoming'] = (
+            room.bookings.active().filter(check_out__gt=today).order_by('check_in')[:5]
+        )
+    return render(request, 'booking/room_detail.html', context)
 
 
 STATUS_FILTERS = [
@@ -129,14 +164,21 @@ def booking_list(request):
     if status not in dict(STATUS_FILTERS):
         status = 'active'
 
+    query = request.GET.get('q', '').strip()
+
     bookings = Booking.objects.select_related('room__room_type').order_by('check_in', 'pk')
     if status != 'all':
         bookings = bookings.filter(status=status)
+    if query:
+        bookings = bookings.filter(
+            Q(guest_name__icontains=query) | Q(phone__icontains=query) | Q(room__number__icontains=query)
+        )
 
     return render(request, 'booking/booking_list.html', {
         'bookings': bookings,
         'status': status,
         'status_filters': STATUS_FILTERS,
+        'query': query,
     })
 
 
@@ -151,4 +193,7 @@ def cancel(request, pk):
     status = request.POST.get('status')
     if status not in dict(STATUS_FILTERS):
         status = 'active'
-    return redirect(f"{reverse('booking:booking_list')}?status={status}")
+    params = {'status': status}
+    if request.POST.get('q'):
+        params['q'] = request.POST['q']
+    return redirect(f"{reverse('booking:booking_list')}?{urlencode(params)}")

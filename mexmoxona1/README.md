@@ -68,13 +68,27 @@ Brauzerda oching: <http://127.0.0.1:8000/>
 | --- | --- |
 | `/` | Bo‘sh xonalarni sana va mehmonlar soni bo‘yicha qidirish |
 | `/book/<id>/` | Xonani bron qilish formasi |
-| `/rooms/` | Barcha xonalar va bugungi holati (bo‘sh / band) |
-| `/bookings/` | Bronlar ro‘yxati va bekor qilish (faqat xodimlar uchun) |
+| `/rooms/` | Barcha xonalar rasmlari bilan va bugungi holati (bo‘sh / band). Xodimga mehmon ismi ham ko‘rinadi |
+| `/rooms/<id>/` | Xona sahifasi: rasmlar galereyasi, narx, bron qilish. Xodimga hozirgi va yaqin bronlar ko‘rinadi |
+| `/bookings/` | Bronlar ro‘yxati, ism / telefon / xona bo‘yicha qidirish va bekor qilish (faqat xodimlar uchun) |
 | `/admin/` | Boshqaruv paneli |
 
 `/bookings/` sahifasiga kirish uchun avval `/admin/` orqali xodim
 (`is_staff`) hisobi bilan tizimga kiring. Shundan so‘ng menyuda “Bronlar”
 bo‘limi paydo bo‘ladi.
+
+## Xona rasmlari
+
+`/admin/` → **Xonalar** → kerakli xonani oching → pastdagi “Xona rasmlari” bo‘limidan
+rasm yuklang (JPG/PNG/WebP, har biri 5 MB gacha). “Tartib” raqami kichik bo‘lgan rasm
+birinchi (asosiy) bo‘lib chiqadi. Rasmlar `media/` papkasida saqlanadi
+(git’ga qo‘shilmaydi).
+
+## Production uchun
+
+Muhit o‘zgaruvchilari: `DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY=<maxfiy kalit>`,
+`DJANGO_ALLOWED_HOSTS=sizning-domen.uz`. `media/` papkasini Nginx orqali
+`/media/` manzilida taqdim eting (Django buni faqat DEBUG rejimida qiladi).
 
 ## Testlar
 

@@ -1,0 +1,8 @@
+{% with cover=room.cover_image %}
+  {% if cover %}
+    <img src="{{ cover.image.url }}" alt="Xona № {{ room.number }}" loading="lazy"
+         class="h-full w-full object-cover">
+  {% else %}
+    <div class="flex h-full w-full items-center justify-center bg-slate-100 text-sm text-slate-400">Rasm yo‘q</div>
+  {% endif %}
+{% endwith %}

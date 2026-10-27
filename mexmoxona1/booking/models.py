@@ -1,7 +1,13 @@
+import uuid
 from decimal import Decimal
+from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
 class RoomType(models.Model):
@@ -34,6 +40,46 @@ class Room(models.Model):
 
     def __str__(self):
         return f'{self.number} ({self.room_type})'
+
+    @property
+    def cover_image(self):
+        """First photo of the room, or None. Uses prefetched images when available."""
+        images = list(self.images.all())
+        return images[0] if images else None
+
+
+def validate_image_size(file):
+    if file.size > MAX_IMAGE_SIZE:
+        raise ValidationError('Rasm hajmi 5 MB dan oshmasligi kerak.')
+
+
+def room_image_path(instance, filename):
+    # Random name: no clashes between uploads and no user-controlled file names on disk
+    return f'rooms/{instance.room_id}/{uuid.uuid4().hex}{Path(filename).suffix.lower()}'
+
+
+class RoomImage(models.Model):
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name='images', verbose_name='Xona'
+    )
+    image = models.ImageField('Rasm', upload_to=room_image_path, validators=[validate_image_size])
+    caption = models.CharField('Izoh', max_length=150, blank=True)
+    order = models.PositiveIntegerField('Tartib', default=0, help_text='Kichik raqam birinchi chiqadi')
+
+    class Meta:
+        verbose_name = 'Xona rasmi'
+        verbose_name_plural = 'Xona rasmlari'
+        ordering = ['order', 'pk']
+
+    def __str__(self):
+        return f'{self.room.number} — rasm {self.pk}'
+
+
+@receiver(post_delete, sender=RoomImage)
+def delete_image_file(sender, instance, **kwargs):
+    """Remove the file from disk when its row is deleted."""
+    if instance.image:
+        instance.image.delete(save=False)
 
 
 class BookingQuerySet(models.QuerySet):
