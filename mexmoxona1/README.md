@@ -99,11 +99,41 @@ Birinchi rasm asosiy bo‘ladi, boshqasini “Asosiy qilish” tugmasi bilan alm
 Admin buni `/admin/` → **Xonalar** orqali ham qila oladi. Rasmlar `media/` papkasida saqlanadi
 (git’ga qo‘shilmaydi).
 
-## Production uchun
+## Render.com ga joylash
 
-Muhit o‘zgaruvchilari: `DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY=<maxfiy kalit>`,
-`DJANGO_ALLOWED_HOSTS=sizning-domen.uz`. `media/` papkasini Nginx orqali
-`/media/` manzilida taqdim eting (Django buni faqat DEBUG rejimida qiladi).
+Repo ildizida `mexmoxona1/` papkasi bor, shuning uchun Render’da **Root Directory** ni ko‘rsating.
+
+| Sozlama | Qiymat |
+| --- | --- |
+| Root Directory | `mexmoxona1` |
+| Build Command | `./build.sh` |
+| Start Command | `gunicorn hotel.wsgi` |
+
+Environment o‘zgaruvchilari:
+
+| Nomi | Qiymati |
+| --- | --- |
+| `DJANGO_DEBUG` | `0` |
+| `DJANGO_SECRET_KEY` | uzun tasodifiy kalit (`python -c "import secrets;print(secrets.token_urlsafe(50))"`) |
+| `DATABASE_URL` | Render PostgreSQL’ning *Internal Database URL* manzili |
+| `DJANGO_SERVE_MEDIA` | `1` (rasmlarni Django o‘zi beradi) |
+| `DJANGO_MEDIA_ROOT` | persistent disk yo‘li, masalan `/var/data/media` |
+
+`RENDER_EXTERNAL_HOSTNAME` ni Render o‘zi beradi, `ALLOWED_HOSTS` va CSRF avtomatik sozlanadi.
+Boshqa domen ulasangiz, `DJANGO_ALLOWED_HOSTS=domen.uz` qo‘shing.
+
+> **Muhim:** Render’ning bepul xizmatida fayl tizimi doimiy emas. SQLite baza va yuklangan
+> rasmlar har deploy yoki qayta ishga tushishda o‘chib ketadi. Bronlar uchun `DATABASE_URL`
+> (PostgreSQL) ishlating, rasmlar uchun esa pullik xizmatga Persistent Disk ulang yoki rasmlarni
+> alohida saqlash xizmatiga (masalan, Cloudinary) o‘tkazing.
+
+Birinchi deploydan keyin Render Shell’da: `python manage.py createsuperuser`.
+
+## Boshqa serverda (Nginx)
+
+`DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS=domen.uz` o‘rnating,
+`python manage.py collectstatic` ni ishga tushiring va `media/` papkasini Nginx orqali
+`/media/` manzilida taqdim eting.
 
 ## Testlar
 

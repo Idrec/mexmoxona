@@ -31,6 +31,19 @@ if not DEBUG and SECRET_KEY.startswith('django-insecure-'):
     raise RuntimeError('DJANGO_DEBUG=0 bo‘lganda DJANGO_SECRET_KEY muhit o‘zgaruvchisini o‘rnating.')
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+CSRF_TRUSTED_ORIGINS = []
+
+# Render sets this automatically (e.g. mexmoxona.onrender.com)
+RENDER_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_HOST:
+    ALLOWED_HOSTS.append(RENDER_HOST)
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_HOST}')
+
+if not DEBUG:
+    # Behind a TLS-terminating proxy (Render, Nginx)
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -47,6 +60,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -88,6 +102,13 @@ DATABASES = {
         'OPTIONS': {'transaction_mode': 'IMMEDIATE'},
     }
 }
+
+# Production: set DATABASE_URL (e.g. Render PostgreSQL). Bookings use select_for_update(),
+# which locks rows on PostgreSQL, so double bookings are still prevented.
+if os.environ.get('DATABASE_URL'):
+    import dj_database_url
+
+    DATABASES['default'] = dj_database_url.config(conn_max_age=600)
 
 
 # Password validation
@@ -131,10 +152,18 @@ LOGOUT_REDIRECT_URL = 'booking:home'
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 
 # Uploaded files (room photos). In production serve MEDIA_ROOT with Nginx.
 MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# On a host with a persistent disk, point this at the mounted path (e.g. /var/data/media)
+MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
+# Let Django itself serve uploads when there is no Nginx in front (small sites only)
+SERVE_MEDIA = DEBUG or os.environ.get('DJANGO_SERVE_MEDIA') == '1'
 
 
 # Email
