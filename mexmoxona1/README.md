@@ -119,6 +119,8 @@ Environment o‘zgaruvchilari:
 | `DATABASE_URL` | Render PostgreSQL’ning *Internal Database URL* manzili |
 | `DJANGO_SERVE_MEDIA` | `1` (rasmlarni Django o‘zi beradi) |
 | `DJANGO_MEDIA_ROOT` | persistent disk yo‘li, masalan `/var/data/media` |
+| `DJANGO_SUPERUSER_USERNAME` | admin logini |
+| `DJANGO_SUPERUSER_PASSWORD` | admin paroli (har deploy’da shu qiymatga o‘rnatiladi) |
 
 `RENDER_EXTERNAL_HOSTNAME` ni Render o‘zi beradi, `ALLOWED_HOSTS` va CSRF avtomatik sozlanadi.
 Boshqa domen ulasangiz, `DJANGO_ALLOWED_HOSTS=domen.uz` qo‘shing.
@@ -128,7 +130,7 @@ Boshqa domen ulasangiz, `DJANGO_ALLOWED_HOSTS=domen.uz` qo‘shing.
 > (PostgreSQL) ishlating, rasmlar uchun esa pullik xizmatga Persistent Disk ulang yoki rasmlarni
 > alohida saqlash xizmatiga (masalan, Cloudinary) o‘tkazing.
 
-Birinchi deploydan keyin Render Shell’da: `python manage.py createsuperuser`.
+Admin hisobi `DJANGO_SUPERUSER_*` o‘zgaruvchilaridan har deploy’da avtomatik yaratiladi (Shell kerak emas). Parolni o‘zgartirish uchun o‘zgaruvchini yangilab, qayta deploy qiling. Parolni kodga yozmang: repo ommaviy.
 
 ## Boshqa serverda (Nginx)
 

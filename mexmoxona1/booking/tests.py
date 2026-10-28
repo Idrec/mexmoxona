@@ -364,3 +364,28 @@ class ManagerRoleTests(TestCase):
             call_command('create_manager', 'yangi', password='Kuchli-parol-2026', verbosity=0)
         with self.assertRaises(CommandError):
             call_command('create_manager', 'boshqa', password='123', verbosity=0)
+
+
+class EnsureAdminTests(TestCase):
+    def run_command(self, **env):
+        from unittest import mock
+        with mock.patch.dict('os.environ', env, clear=False):
+            call_command('ensure_admin', verbosity=0)
+
+    def test_skipped_without_env(self):
+        self.run_command()
+        self.assertFalse(User.objects.exists())
+
+    def test_creates_then_updates_password(self):
+        env = {'DJANGO_SUPERUSER_USERNAME': 'admin', 'DJANGO_SUPERUSER_PASSWORD': 'birinchi'}
+        self.run_command(**env)
+        user = User.objects.get(username='admin')
+        self.assertTrue(user.is_superuser and user.is_staff)
+        self.assertTrue(user.check_password('birinchi'))
+
+        self.run_command(DJANGO_SUPERUSER_USERNAME='admin', DJANGO_SUPERUSER_PASSWORD='ikkinchi')
+        self.assertEqual(User.objects.count(), 1)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('ikkinchi'))
+        self.assertTrue(self.client.login(username='admin', password='ikkinchi'))
+        self.assertEqual(self.client.get(reverse('admin:index')).status_code, 200)
