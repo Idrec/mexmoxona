@@ -101,13 +101,14 @@ Admin buni `/admin/` → **Xonalar** orqali ham qila oladi. Rasmlar `media/` pap
 
 ## Render.com ga joylash
 
-Repo ildizida `mexmoxona1/` papkasi bor, shuning uchun Render’da **Root Directory** ni ko‘rsating.
+Django loyihasi repo ichidagi `mexmoxona1/` papkasida. **Root Directory ni bo‘sh qoldiring**
+(repo ildizi): ildizdagi `build.sh` o‘zi `mexmoxona1/` ga o‘tadi.
 
 | Sozlama | Qiymat |
 | --- | --- |
-| Root Directory | `mexmoxona1` |
+| Root Directory | *(bo‘sh)* |
 | Build Command | `./build.sh` |
-| Start Command | `gunicorn hotel.wsgi` |
+| Start Command | `cd mexmoxona1 && gunicorn hotel.wsgi` |
 
 Environment o‘zgaruvchilari:
 
